@@ -1,0 +1,8 @@
+{
+  "text": "17 plus 25 is 42.",
+  "provider": "ollama",
+  "model": "qwen3:0.6b",
+  "fallback": false,
+  "conversation_id": null,
+  "history_notice": null
+}

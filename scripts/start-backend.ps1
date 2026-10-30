@@ -1,0 +1,5 @@
+$ErrorActionPreference = 'Stop'
+Set-Location -LiteralPath (Split-Path $PSScriptRoot -Parent)
+if (-not (Test-Path '.venv\Scripts\python.exe')) { throw 'Run scripts\setup.ps1 first.' }
+& '.\.venv\Scripts\python.exe' -m backend.run
+if ($LASTEXITCODE -ne 0) { throw 'Backend exited with an error.' }

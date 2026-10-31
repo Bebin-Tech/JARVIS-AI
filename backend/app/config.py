@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     piper_voice: str = "en_US-lessac-medium"
     realtime_model: str = "gpt-realtime-2.1"
     search_provider: Literal["duckduckgo", "brave"] = "duckduckgo"
+    microphone_device: int | None = None
+    language: Literal["en", "ta", "auto"] = "auto"
+    wake_threshold: float = Field(default=0.55, ge=0.1, le=0.95)
+    vad_threshold: float = Field(default=0.015, ge=0.001, le=0.2)
+    followup_seconds: int = Field(default=15, ge=3, le=120)
+    speech_volume: float = Field(default=0.8, ge=0, le=1)
 
     @field_validator("ollama_url")
     @classmethod

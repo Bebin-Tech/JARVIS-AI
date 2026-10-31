@@ -102,6 +102,35 @@ def test_rejection_and_validation(client):
         assert "error" in client.post("/api/tools", json={"name": tool, "arguments": args}).json()
 
 
+def test_download_requires_approval_and_never_overwrites(client, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    retrieve = AsyncMock(return_value=b"test document")
+    monkeypatch.setattr("backend.app.tools.web.retrieve_public", retrieve)
+    client.app.state.settings.mode = "hybrid"
+    arguments = {"url": "https://example.com/doc.txt", "path": "doc.txt"}
+    for expected in ["completed", "failed"]:
+        task = client.post(
+            "/api/tools", json={"name": "download_file", "arguments": arguments, "mode": "hybrid"}
+        ).json()
+        assert task["approval_required"]
+        if expected == "completed":
+            retrieve.assert_not_awaited()
+        result = client.post(f"/api/tasks/{task['task_id']}/decision", json={"approve": True})
+        assert result.json()["status"] == expected
+    assert (client.app.state.settings.workspace_dir / "doc.txt").read_bytes() == b"test document"
+
+
+def test_native_safe_actions_still_require_memory_consent(client):
+    tools = client.app.state.tools
+    note = asyncio.run(tools.call("save_note", {"content": "Test note"}, auto_safe=True))
+    assert not note.get("approval_required")
+    assert len(client.get("/api/records/note").json()) == 1
+    memory = asyncio.run(tools.call("save_memory", {"content": "Test preference"}, auto_safe=True))
+    assert memory["approval_required"]
+    assert client.get("/api/records/memory").json() == []
+
+
 def test_reminders_and_memories(client):
     for name, args in [
         ("save_memory", {"content": "I prefer blue interfaces"}),

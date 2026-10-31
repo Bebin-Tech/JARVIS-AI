@@ -61,8 +61,8 @@ class LocalVoice:
                 )
             segments, info = self.whisper.transcribe(
                 samples,
-                language=language,
-                beam_size=1,
+                language=None if language == "auto" else language,
+                beam_size=5,
                 condition_on_previous_text=False,
                 vad_filter=True,
             )

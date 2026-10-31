@@ -81,6 +81,17 @@ TOOLS = {
     "screenshot": (Empty, True, "Capture the screen locally after user approval."),
     "save_memory": (RecordArgs, True, "Propose a long-term memory. Always requires user consent."),
     "save_note": (RecordArgs, True, "Save a personal note after approval."),
+    "save_todo": (RecordArgs, True, "Add a personal to-do item."),
+    "schedule_event": (
+        ReminderArgs,
+        True,
+        "Schedule an item at an explicit future timezone-aware datetime.",
+    ),
+    "daily_summary": (
+        Empty,
+        False,
+        "Read saved tasks, schedules, reminders and notes for a daily summary.",
+    ),
     "set_reminder": (
         ReminderArgs,
         True,
@@ -176,8 +187,12 @@ def applications():
 
 class ToolRegistry:
     def __init__(self, config, records, client):
+        from backend.app.tools.extended import EXTRA_TOOLS
+
+        TOOLS.update(EXTRA_TOOLS)
         self.config, self.records, self.client = config, records, client
         self.approval_lock = threading.Lock()
+        self.halted = threading.Event()
         self.launched = {}
         self.config.workspace_dir.mkdir(parents=True, exist_ok=True)
 
@@ -194,16 +209,33 @@ class ToolRegistry:
             for name, (model, _, description) in TOOLS.items()
         ]
 
-    async def call(self, name: str, arguments: dict, mode="offline"):
+    async def call(self, name: str, arguments: dict, mode="offline", auto_safe=False):
+        if self.halted.is_set():
+            return {"error": "Emergency stop is active. Resume JARVIS before new actions."}
         if name not in TOOLS:
             return {"error": "Unknown tool"}
         try:
             model, requires_approval, _ = TOOLS[name]
             args = model.model_validate(arguments)
             self.validate(name, args)
-            if requires_approval:
+            safe_tools = {
+                "open_app",
+                "open_url",
+                "open_workspace",
+                "save_note",
+                "create_folder",
+                "create_python_project",
+                "write_file",
+                "save_todo",
+                "schedule_event",
+                "set_reminder",
+            }
+            if requires_approval and not (auto_safe and name in safe_tools):
                 return await run_in_threadpool(self.propose, name, args.model_dump(mode="json"))
-            return await self.execute(name, args, mode)
+            result = await self.execute(name, args, mode)
+            if auto_safe:
+                await run_in_threadpool(self.audit, name, args.model_dump(mode="json"), result)
+            return result
         except (ValueError, OSError, httpx.HTTPError) as error:
             return {
                 "error": str(error)[:400]
@@ -212,6 +244,11 @@ class ToolRegistry:
             }
 
     def validate(self, name, args):
+        if hasattr(args, "content"):
+            from backend.app.api.routes.chat import sensitive
+
+            if sensitive(args.content):
+                raise ValueError("Potential secrets cannot be stored in task arguments")
         if hasattr(args, "path"):
             path = scoped_path(self.config.workspace_dir, args.path)
             if name in {"write_file", "read_file"}:
@@ -227,14 +264,14 @@ class ToolRegistry:
                     ".html",
                 }:
                     raise ValueError("File type is not allowed")
-        if name in {"open_url", "fetch_page"}:
+        if name in {"open_url", "fetch_page", "download_file"}:
             public_url(args.url)
         if name in {"save_memory", "save_note", "set_reminder"}:
             from backend.app.api.routes.chat import sensitive
 
             if sensitive(args.content):
                 raise ValueError("Potential secrets cannot be saved as memory")
-        if name == "set_reminder":
+        if name in {"set_reminder", "schedule_event"}:
             if args.due_at.tzinfo is None or args.due_at <= datetime.now(UTC):
                 raise ValueError("Reminder must be in the future and include its timezone")
 
@@ -259,6 +296,23 @@ class ToolRegistry:
             "message": "Awaiting approval in the task panel. Not executed.",
         }
 
+    def audit(self, name, arguments, result):
+        with Session(self.records.engine) as db, db.begin():
+            db.add(
+                Task(
+                    id=str(uuid4()),
+                    tool=name,
+                    arguments=json.dumps(arguments),
+                    status="failed"
+                    if result.get("error")
+                    or result.get("verified") is False
+                    or result.get("exit_code", 0)
+                    else "completed",
+                    result=json.dumps(result, ensure_ascii=False),
+                    created_at=datetime.now(UTC).isoformat(),
+                )
+            )
+
     async def decide(self, task_id: str, approve: bool, mode: str):
         with self.approval_lock, Session(self.records.engine) as db, db.begin():
             task = db.get(Task, task_id)
@@ -275,7 +329,11 @@ class ToolRegistry:
             args = TOOLS[name][0].model_validate(arguments)
             self.validate(name, args)
             result = await self.execute(name, args, mode)
-            status = "completed"
+            status = (
+                "failed"
+                if result.get("exit_code", 0) != 0 or result.get("verified") is False
+                else "completed"
+            )
         except Exception as error:
             status, result = "failed", {"error": str(error)[:300]}
         with Session(self.records.engine) as db, db.begin():
@@ -284,6 +342,29 @@ class ToolRegistry:
         return {"status": status, "result": result}
 
     async def execute(self, name, args, mode):
+        if self.halted.is_set():
+            raise ValueError("Emergency stop is active")
+        if name == "download_file":
+            if mode == "offline":
+                raise ValueError("Downloads are unavailable in offline mode")
+            from backend.app.tools.web import retrieve_public
+
+            destination = scoped_path(self.config.workspace_dir, args.path)
+            if destination.suffix.lower() not in {".pdf", ".txt", ".md", ".zip"}:
+                raise ValueError("Only PDF, text and ZIP downloads are permitted")
+            content = await retrieve_public(
+                args.url, ["application/pdf", "text/plain", "application/zip"], 10_000_000
+            )
+            if self.halted.is_set():
+                raise ValueError("Emergency stop is active")
+            with destination.open("xb") as output:
+                output.write(content)
+            return {
+                "saved": args.path,
+                "bytes": len(content),
+                "source": args.url,
+                "verified": destination.stat().st_size == len(content),
+            }
         if name in {"web_search", "weather", "fetch_page"}:
             if mode == "offline":
                 raise ValueError("Internet tools are unavailable in offline mode")
@@ -295,6 +376,10 @@ class ToolRegistry:
         return await run_in_threadpool(self.local, name, args)
 
     def local(self, name, args):
+        from backend.app.tools.extended import EXTRA_TOOLS, execute
+
+        if name in EXTRA_TOOLS:
+            return execute(name, args, self.config, self.halted)
         root = self.config.workspace_dir
         if name == "open_workspace":
             os.startfile(str(root))
@@ -303,6 +388,10 @@ class ToolRegistry:
             return system_info()
         if name == "task_status":
             return {"tasks": self.records.tasks()[:10]}
+        if name == "daily_summary":
+            return {
+                kind: self.records.list(kind) for kind in ["todo", "schedule", "reminder", "note"]
+            }
         if name == "list_files":
             path = scoped_path(root, args.path)
             return {
@@ -374,9 +463,19 @@ class ToolRegistry:
             filename = f"screenshot-{uuid4()}.png"
             pyautogui.screenshot().save(root / filename)
             return {"saved": filename}
-        if name in {"save_memory", "save_note", "set_reminder"}:
-            kind = {"save_memory": "memory", "save_note": "note", "set_reminder": "reminder"}[name]
-            due = args.due_at.astimezone(UTC).isoformat() if name == "set_reminder" else None
+        if name in {"save_memory", "save_note", "set_reminder", "save_todo", "schedule_event"}:
+            kind = {
+                "save_memory": "memory",
+                "save_note": "note",
+                "set_reminder": "reminder",
+                "save_todo": "todo",
+                "schedule_event": "schedule",
+            }[name]
+            due = (
+                args.due_at.astimezone(UTC).isoformat()
+                if name in {"set_reminder", "schedule_event"}
+                else None
+            )
             return self.records.save(kind, args.content, due)
         raise ValueError("Tool is not implemented")
 

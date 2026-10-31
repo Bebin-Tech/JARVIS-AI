@@ -1,0 +1,11 @@
+{
+  "running": true,
+  "state": "standby",
+  "paused": false,
+  "error": "",
+  "microphone_active": true,
+  "level": 0.0,
+  "mode": "personal",
+  "device": null,
+  "wake_threshold": 0.55
+}

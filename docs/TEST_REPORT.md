@@ -55,3 +55,29 @@ Optional training/quantization dependencies produced PyInstaller collection warn
 ## Limits
 
 This report is evidence for the implemented local personal-assistant paths, not a production certification. No arbitrary generated command was executed. No user file was overwritten/deleted. No private API key is present in these test records. UI and model behavior still require user acceptance on actual hardware.
+
+## Native background expansion — 31 October 2026
+
+The latest brief adds a tray application independent of dashboard/browser lifetime. Real native microphone capture opened at 16 kHz mono; short test bytes were discarded. The live background API reported standby with microphone_active=true and no error. Pause reported paused=true, microphone_active=false and level=0. Resume returned to standby with microphone_active=true. No human microphone audio was saved. Startup HKCU Run was installed and its fully quoted pythonw command read back; Windows was not logged out or rebooted for testing.
+
+A real generated-audio native Conversation check produced:
+
+```json
+{"transcript":"Hello Jarvis, what is 17 plus 25?","native_agent_reply":"17 plus 25 is 42.","spoken_seconds":2.37,"provider":"ollama","model":"qwen3:0.6b"}
+```
+
+An earlier shorter generated phrase was transcribed incorrectly as 2017; decoding now uses beam size 5. The passing phrase does not establish general accent or multilingual reliability. The default remains lightweight multilingual Whisper tiny. all-minilm was downloaded; actual Ollama embedding produced two 384-dimensional vectors. Vectors stay in memory and approved facts remain in SQLite, with lexical fallback if local embeddings fail.
+
+Added regression coverage includes Windows mutex duplicates, wake cooldown/follow-up states, exact spoken confirmation, privacy capture abort/tool halt, SHA-protected edits/backups, ZIP traversal rejection, bounded organization/rollback, mocked fixed power arguments, download approval/no-overwrite, and native memory consent. Shutdown/restart/lock, user-file deletion and arbitrary generated scripts were not executed during verification.
+
+The new UI was inspected at desktop and mobile dimensions. Native voice settings expose real microphone devices and persisted wake/language/follow-up/volume settings. Dashboard controls target the background engine; closing the dashboard leaves the native process running. Development labels, checklists and extra explanatory cards were removed. Screenshot: screenshots/dashboard.png.
+
+The windowless build's first launch exposed Uvicorn console logging assumptions; setting log_config=None and using a rotating file handler fixed it. A real packaged tray launch subsequently logged successful startup. Final bundle smoke writes background-smoke.json with tray visibility, backend state, paused state and microphone status. Only English installed system voices were observed. Edge Tamil speech and authenticated OpenAI paths remain unverified. Existing earlier reports describe the previous browser-first build; the new native phase report supersedes their startup/voice limitations where stated above.
+
+Final verification: **44 backend tests passed**, Ruff passed, React Hooks/TypeScript lint passed, production build passed, and pip check reported no broken requirements. The final packaged executable reached real microphone standby with no error; Pause changed microphone_active to false. Evidence is stored in packaged-background-result.json. Its separate paused tray smoke reported tray=true, running=true, paused=true, microphone_active=false. The starting state in that short smoke reflects wake-model initialization; the subsequent live packaged check verifies those models loaded successfully.
+
+The optional qwen3:1.7b download failed because an upstream redirect resolved to a non-public NAT64 address. It is not installed or selected. The verified default remains qwen3:0.6b; all-minilm is installed. No cloud/Tamil success is implied by these results.
+
+Crash recovery was exercised on the actual source worker: only the verified process owning port 8000 was terminated. The supervisor restarted it, the process changed, and the replacement reported standby with microphone_active=true. A duplicate launcher invocation did not replace the working backend. See crash-recovery-result.json. This single failure test is not proof of long-term reliability or startup after a real login.
+
+Additional live checks: the real local native agent selected create_folder, created an isolated generated test folder and returned a completed audit record; a filesystem check confirmed it. See native-tool-result.json. Optional online Tamil speech using ta-IN-PallaviNeural returned 30,096 bytes, decoded successfully with soundfile at 24 kHz for 5.02 seconds; no microphone was used. See tamil-speech-result.json. This supersedes the earlier unverified Edge synthesis statement; human Tamil/Tanglish recognition remains unverified and offline Tamil playback is still unavailable without a Tamil voice.

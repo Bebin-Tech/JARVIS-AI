@@ -60,11 +60,7 @@ async def chat(body: ChatInput, request: Request):
             messages = saved[-20:]
         messages.append({"role": "user", "content": body.text})
         if request.app.state.preferences.get("memory_enabled", False):
-            memories = await run_in_threadpool(request.app.state.records.list, "memory")
-            words = set(body.text.lower().split())
-            relevant = [
-                m["content"] for m in memories if words.intersection(m["content"].lower().split())
-            ][:5]
+            relevant = await request.app.state.semantic.retrieve(body.text)
             if relevant:
                 import json
 

@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Plus,
   Trash2,
+  X,
 } from "lucide-react";
 import VoicePanel from "./VoicePanel";
 import WorkspacePanel from "./WorkspacePanel";
@@ -40,9 +41,15 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 export default function ChatPanel({
   defaultMode,
   onStateChange,
+  workspaceSection,
+  onOpenWorkspace,
+  onCloseWorkspace,
 }: {
   defaultMode?: string;
   onStateChange?: (state: string) => void;
+  workspaceSection: string | null;
+  onOpenWorkspace: (section: string) => void;
+  onCloseWorkspace: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
@@ -53,12 +60,18 @@ export default function ChatPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [provider, setProvider] = useState("No provider used yet");
+  const [provider, setProvider] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [toolsEnabled, setToolsEnabled] = useState(false);
   const transcript = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
   const modeChosen = useRef(false);
+  const workspaceDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = workspaceDialog.current;
+    if (workspaceSection && dialog && !dialog.open) dialog.showModal();
+    if (!workspaceSection && dialog?.open) dialog.close();
+  }, [workspaceSection]);
 
   useEffect(() => {
     if (defaultMode && !modeChosen.current) setMode(defaultMode);
@@ -134,7 +147,7 @@ export default function ChatPanel({
     setConversationId(null);
     setError("");
     setNotice("");
-    setProvider("No provider used yet");
+    setProvider("");
   }
 
   async function openConversation(id: string) {
@@ -222,7 +235,7 @@ export default function ChatPanel({
               if (!e.target.checked) setConversationId(null);
             }}
           />{" "}
-          Save future turns locally
+          Save history
         </label>
       </div>
       <label className="agent-toggle">
@@ -232,13 +245,11 @@ export default function ChatPanel({
           disabled={busy}
           onChange={(e) => setToolsEnabled(e.target.checked)}
         />{" "}
-        Enable agent tools for this conversation · changes require approval
+        Agent tools
       </label>
       {showHistory && (
         <div className="history-list">
-          <small>
-            Saved locally · saving is off by default · avoid sharing secrets
-          </small>
+          <small>Local history</small>
           {saved.length === 0 && <p>No saved conversations.</p>}
           {saved.map((item) => (
             <div key={item.id}>
@@ -267,15 +278,11 @@ export default function ChatPanel({
       >
         {messages.length === 0 && (
           <div className="chat-empty">
-            <h2>A conversation, on your terms.</h2>
-            <p>
-              Speak or type in English or Tamil. Local AI is configured with
-              Ollama.
-            </p>
-            <small>
-              Enable agent tools to request actions. Review proposed changes in
-              Tasks.
-            </small>
+            <div className="empty-chat-symbol">
+              <MessageSquare size={27} strokeWidth={1.2} />
+            </div>
+            <h2>What’s on your mind?</h2>
+            <p>Speak naturally. Or start typing.</p>
           </div>
         )}
         {messages.map((message, index) => (
@@ -288,8 +295,7 @@ export default function ChatPanel({
         ))}
         {busy && (
           <div className="thinking" role="status">
-            <LoaderCircle className="spin" size={15} /> Waiting for{" "}
-            {mode === "offline" ? "local model" : "AI provider"}…
+            <LoaderCircle className="spin" size={15} /> Thinking…
           </div>
         )}
       </div>
@@ -321,14 +327,39 @@ export default function ChatPanel({
         </button>
       </form>
       <div className="provider-label">
-        {provider} · {save ? "History opted in" : "Unsaved conversation"}
+        <span>
+          {provider ||
+            (mode === "offline"
+              ? "On-device intelligence"
+              : "Cloud intelligence")}
+        </span>
+        <button onClick={() => onOpenWorkspace("tasks")}>Review tasks</button>
       </div>
-      <WorkspacePanel
-        onSettingsChange={(newMode) => {
-          modeChosen.current = true;
-          setMode(newMode);
-        }}
-      />
+      <dialog
+        className="workspace-dialog"
+        ref={workspaceDialog}
+        aria-label="Workspace"
+        onCancel={onCloseWorkspace}
+        onClose={onCloseWorkspace}
+      >
+        <div className="dialog-heading">
+          <span>WORKSPACE</span>
+          <button
+            className="icon-button"
+            aria-label="Close workspace"
+            onClick={onCloseWorkspace}
+          >
+            <X size={19} />
+          </button>
+        </div>
+        <WorkspacePanel
+          section={workspaceSection ?? undefined}
+          onSettingsChange={(newMode) => {
+            modeChosen.current = true;
+            setMode(newMode);
+          }}
+        />
+      </dialog>
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Radio, Volume2 } from "lucide-react";
+import BackgroundSettings from "./BackgroundSettings";
 
 type Props = {
   onTranscript: (text: string) => Promise<string | undefined>;
@@ -70,6 +71,13 @@ export default function VoicePanel({
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voice, setVoice] = useState("piper");
+  const [native, setNative] = useState<{
+    running: boolean;
+    state: string;
+    paused: boolean;
+    level: number;
+    error: string;
+  } | null>(null);
   const [transcript, setTranscript] = useState("");
   const [level, setLevel] = useState(0);
   const [levels, setLevels] = useState<number[]>(Array(36).fill(0));
@@ -96,7 +104,11 @@ export default function VoicePanel({
   const generation = useRef(0);
   const wakeMode = useRef(false);
   const micTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const active = !["idle", "error"].includes(state);
+  const useNative = native?.running && !live.current;
+  const shownState = useNative ? native.state : state;
+  const active = useNative
+    ? !native.paused
+    : !["idle", "error"].includes(state);
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
 
@@ -105,8 +117,51 @@ export default function VoicePanel({
     setState(next);
   }
   useEffect(() => {
-    onStateChange?.(state);
-  }, [state, onStateChange]);
+    onStateChange?.(shownState);
+  }, [shownState, onStateChange]);
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function refresh() {
+      try {
+        const response = await fetch("/api/background/status", {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (response.ok && !cancelled) {
+          const value = await response.json();
+          setNative(value);
+          if (value.running && !live.current) {
+            setLevel(value.level ?? 0);
+            setLevels((previous) => [...previous.slice(1), value.level ?? 0]);
+          }
+        }
+      } catch {
+        /* Native process is optional in browser-only mode. */
+      }
+      if (!cancelled) timer = setTimeout(() => void refresh(), 1000);
+    }
+    void refresh();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
+  async function nativeCommand(action: string) {
+    try {
+      const response = await checked(
+        await fetch("/api/background/command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        }),
+      );
+      setNative(await response.json());
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Background command failed",
+      );
+    }
+  }
 
   function interrupt() {
     if (player.current) {
@@ -261,6 +316,10 @@ export default function VoicePanel({
   }
 
   async function start(realtime = false) {
+    if (native?.running && !realtime) {
+      await nativeCommand("activate");
+      return;
+    }
     stop();
     setError("");
     setTranscript("");
@@ -457,124 +516,170 @@ export default function VoicePanel({
   }
 
   return (
-    <section className="voice-panel" aria-label="Voice controls">
+    <section
+      className="voice-panel"
+      id="voice-controls"
+      aria-label="Voice controls"
+    >
       <div className="voice-heading">
-        <Radio size={16} />
-        <strong>VOICE LINK</strong>
-        <span role="status">
-          {state === "armed" ? "Listening for Hey Jarvis" : state}
+        <Radio size={14} />
+        <strong>VOICE CHANNEL</strong>
+        <span role="status" className={active ? "voice-live" : ""}>
+          {shownState === "standby"
+            ? "Wake listening"
+            : shownState === "armed"
+              ? "Wake listening"
+              : shownState === "idle"
+                ? "Ready"
+                : shownState}
         </span>
       </div>
-      <div className="voice-options">
-        <label>
-          Language{" "}
-          <select
-            value={language}
-            disabled={active}
-            onChange={(e) => setLanguage(e.target.value)}
-          >
-            <option value="en">English</option>
-            <option value="ta">Tamil · தமிழ்</option>
-          </select>
-        </label>
-        <label>
-          Microphone{" "}
-          <select
-            value={device}
-            disabled={active}
-            onChange={(e) => setDevice(e.target.value)}
-          >
-            <option value="">System default</option>
-            {devices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || "Microphone"}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Speech voice{" "}
-          <select
-            value={voice}
-            disabled={active}
-            onChange={(e) => setVoice(e.target.value)}
-          >
-            <option value="piper">Piper · local English</option>
-            {voices
-              .filter((v) => mode !== "offline" || v.localService)
-              .map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} · {v.lang}
-                  {v.localService ? " · local" : " · network"}
-                </option>
-              ))}
-          </select>
-        </label>
-      </div>
-      <div className="voice-actions">
-        <button
-          disabled={!available.stt || active}
-          onClick={() => void start()}
+      <div className="voice-console">
+        <div
+          className={`waveform ${active ? "is-live" : ""}`}
+          aria-label="Live microphone waveform"
         >
-          <Mic size={16} />
-          {wake ? "Enable wake listening" : "Start voice"}
-        </button>
-        <button disabled={!active} onClick={stop}>
-          <MicOff size={16} />
-          Stop / mute
-        </button>
-        <button disabled={state !== "listening"} onClick={() => void finish()}>
-          Finish utterance
-        </button>
-        <button
-          disabled={mode === "offline" || active}
-          onClick={() => void start(true)}
-        >
-          Cloud Realtime
-        </button>
+          {levels.map((value, index) => (
+            <i key={index} style={{ height: `${Math.max(3, value * 34)}px` }} />
+          ))}
+        </div>
+        <div className="voice-actions">
+          <button
+            id="voice-start"
+            className="voice-start"
+            disabled={!available.stt || (active && !native?.running)}
+            onClick={() => void start()}
+          >
+            <Mic size={15} />
+            {native?.running
+              ? native.paused
+                ? "Resume voice"
+                : "Speak now"
+              : wake
+                ? "Wake listening"
+                : "Start voice"}
+          </button>
+          <button
+            id="voice-stop"
+            className="voice-stop"
+            disabled={!active}
+            onClick={() =>
+              native?.running ? void nativeCommand("pause") : stop()
+            }
+            aria-label="Stop and mute microphone"
+          >
+            <MicOff size={15} />
+          </button>
+          {state === "listening" && (
+            <button onClick={() => void finish()}>Finish</button>
+          )}
+        </div>
       </div>
-      <div className="voice-options">
-        <label>
-          <input
-            type="checkbox"
-            checked={wake}
-            disabled={active || !available.wake}
-            onChange={(e) => setWake(e.target.checked)}
-          />{" "}
-          Continuous local listening for “Hey Jarvis”
-        </label>
-        <label>
-          <Volume2 size={14} />
-          <input
-            aria-label="Audio volume"
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
-          />
-        </label>
-      </div>
+      <details className="voice-settings">
+        <summary>
+          Voice options
+          <span>
+            {language === "ta" ? "தமிழ்" : "EN"} ·{" "}
+            {voice === "piper" ? "Local" : "System"}
+          </span>
+        </summary>
+        {native?.running ? (
+          <BackgroundSettings />
+        ) : (
+          <>
+            <div className="voice-options">
+              <label>
+                Language
+                <select
+                  value={language}
+                  disabled={active}
+                  onChange={(e) => setLanguage(e.target.value)}
+                >
+                  <option value="en">English</option>
+                  <option value="ta">Tamil · தமிழ்</option>
+                </select>
+              </label>
+              <label>
+                Microphone
+                <select
+                  value={device}
+                  disabled={active}
+                  onChange={(e) => setDevice(e.target.value)}
+                >
+                  <option value="">System default</option>
+                  {devices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || "Microphone"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Voice
+                <select
+                  value={voice}
+                  disabled={active}
+                  onChange={(e) => setVoice(e.target.value)}
+                >
+                  <option value="piper">Piper · English</option>
+                  {voices
+                    .filter((v) => mode !== "offline" || v.localService)
+                    .map((v) => (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {v.name} · {v.lang}
+                        {v.localService ? " · local" : " · network"}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            <div className="voice-preferences">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={wake}
+                  disabled={active || !available.wake}
+                  onChange={(e) => setWake(e.target.checked)}
+                />
+                Wake word · continuous listening
+              </label>
+              <label>
+                <Volume2 size={14} />
+                <input
+                  aria-label="Audio volume"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={volume}
+                  onChange={(e) => setVolume(Number(e.target.value))}
+                />
+              </label>
+              <button
+                disabled={mode === "offline" || active}
+                onClick={() => void start(true)}
+              >
+                Cloud Realtime
+              </button>
+            </div>
+            {language === "ta" && (
+              <small>Tamil playback requires an installed Tamil voice.</small>
+            )}
+          </>
+        )}
+      </details>
+      {!available.stt && (
+        <small className="voice-model-notice">
+          Local speech is unavailable. Check voice model setup.
+        </small>
+      )}
       <div className="audio-meter" aria-label="Microphone level">
         <div style={{ width: `${level * 100}%` }} />
       </div>
-      <div className="waveform" aria-label="Live microphone waveform">
-        {levels.map((value, index) => (
-          <i key={index} style={{ height: `${Math.max(2, value * 40)}px` }} />
-        ))}
-      </div>
-      <small>
-        {available.stt ? "Local Whisper ready" : "Local Whisper model missing"}{" "}
-        · {available.tts ? "Piper ready" : "Piper model missing"} ·{" "}
-        {available.wake ? "Wake model ready" : "Wake model missing"}. Microphone
-        starts only when you click Start. Tamil speech requires an installed
-        Tamil system voice.
-      </small>
       {transcript && <p className="voice-transcript">{transcript}</p>}
-      {error && (
+      {(error || native?.error) && (
         <p role="alert" className="chat-error">
-          {error}
+          {error || native?.error}
         </p>
       )}
     </section>

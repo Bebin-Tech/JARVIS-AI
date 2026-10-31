@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from backend.app.api.routes.background import router as background_router
 from backend.app.api.routes.chat import router as chat_router
 from backend.app.api.routes.system import router as system_router
 from backend.app.api.routes.voice import router as voice_router
@@ -18,6 +19,7 @@ from backend.app.config import ROOT, Settings
 from backend.app.core.agent import Agent
 from backend.app.memory.database import History
 from backend.app.memory.records import Records
+from backend.app.memory.semantic import SemanticMemory
 from backend.app.security.body_limit import BodyLimitMiddleware
 from backend.app.security.secrets import get_secret
 from backend.app.services.ai_engine import AIEngine
@@ -37,10 +39,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         settings.data_dir.mkdir(parents=True, exist_ok=True)
+        app.state.loop = asyncio.get_running_loop()
         app.state.history = History(settings.data_dir)
         app.state.records = Records(app.state.history.engine)
         app.state.preferences = app.state.records.preferences()
-        for name in ["mode", "ollama_model", "openai_model", "search_provider"]:
+        for name in [
+            "mode",
+            "ollama_model",
+            "openai_model",
+            "search_provider",
+            "microphone_device",
+            "language",
+            "wake_threshold",
+            "followup_seconds",
+            "speech_volume",
+        ]:
             if name in app.state.preferences:
                 setattr(settings, name, app.state.preferences[name])
         if not settings.openai_api_key.get_secret_value():
@@ -54,13 +67,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.ai = AIEngine(settings, client)
             app.state.tools = ToolRegistry(settings, app.state.records, client)
             app.state.agent = Agent(app.state.ai, app.state.tools)
-            yield
-        app.state.history.engine.dispose()
+            app.state.semantic = SemanticMemory(settings, app.state.records, client)
+            try:
+                yield
+            finally:
+                app.state.history.engine.dispose()
 
     app = FastAPI(title="JARVIS AI", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.allowed_origins = allowed_origins
     app.include_router(system_router)
+    app.include_router(background_router)
     app.include_router(chat_router)
     app.include_router(voice_router)
     app.include_router(workspace_router)

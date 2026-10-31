@@ -134,19 +134,27 @@ async def decide(task_id: UUID, body: DecisionInput, request: Request):
 
 
 @router.get("/records/{kind}")
-def records(kind: Literal["memory", "note", "reminder"], request: Request):
+def records(kind: Literal["memory", "note", "reminder", "todo", "schedule"], request: Request):
     return request.app.state.records.list(kind)
 
 
 @router.put("/records/{kind}/{record_id}")
 def edit_record(
-    kind: Literal["memory", "note", "reminder"],
+    kind: Literal["memory", "note", "reminder", "todo", "schedule"],
     record_id: UUID,
     body: RecordInput,
     request: Request,
 ):
     if sensitive(body.content):
         raise HTTPException(422, "Potential secrets cannot be saved")
+    if kind in {"reminder", "schedule"} and body.due_at:
+        from datetime import datetime
+
+        try:
+            if datetime.fromisoformat(body.due_at).tzinfo is None:
+                raise ValueError("Timezone required")
+        except ValueError as error:
+            raise HTTPException(422, "Reminder requires an ISO datetime with timezone") from error
     try:
         return request.app.state.records.save(kind, body.content, body.due_at, str(record_id))
     except ValueError as error:

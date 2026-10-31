@@ -28,7 +28,7 @@ class TextExtractor(HTMLParser):
             self.parts.append(data.strip())
 
 
-async def fetch_page(url: str):
+async def retrieve_public(url: str, allowed_types, limit):
     from backend.app.tools.registry import public_url
 
     public_url(url)
@@ -58,12 +58,17 @@ async def fetch_page(url: str):
                 raise ValueError("Page redirects are blocked; provide its final HTTPS URL")
             response.raise_for_status()
             kind = response.headers.get("content-type", "")
-            if not any(t in kind for t in ["text/html", "text/plain"]):
-                raise ValueError("Only HTML or plain text pages can be retrieved")
+            if not any(t in kind for t in allowed_types):
+                raise ValueError("Response content type is not permitted")
             async for chunk in response.aiter_bytes():
                 content.extend(chunk)
-                if len(content) > 1_000_000:
-                    raise ValueError("Page exceeds the 1 MB limit")
+                if len(content) > limit:
+                    raise ValueError("Download exceeds its size limit")
+    return bytes(content)
+
+
+async def fetch_page(url: str):
+    content = await retrieve_public(url, ["text/html", "text/plain"], 1_000_000)
     parser = TextExtractor()
     parser.feed(content.decode("utf-8", errors="replace"))
     return {"source": url, "text": "\n".join(parser.parts)[:16000], "untrusted_data": True}

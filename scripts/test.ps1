@@ -5,7 +5,7 @@ $env:TEMP = Join-Path $PWD '.cache\tmp'
 $env:TMP = $env:TEMP
 & '.\.venv\Scripts\python.exe' -m pytest -q
 if ($LASTEXITCODE -ne 0) { throw 'Backend tests failed.' }
-& '.\.venv\Scripts\python.exe' -m ruff check backend
+& '.\.venv\Scripts\python.exe' -m ruff check backend desktop scripts/verify-native.py
 if ($LASTEXITCODE -ne 0) { throw 'Backend lint failed.' }
 Push-Location frontend
 try {

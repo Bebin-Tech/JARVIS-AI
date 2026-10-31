@@ -1,0 +1,8 @@
+{
+  "voice": "ta-IN-PallaviNeural",
+  "audio_bytes": 30096,
+  "sample_rate": 24000,
+  "duration_seconds": 5.02,
+  "decoded": true,
+  "microphone_used": false
+}

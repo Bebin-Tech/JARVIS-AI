@@ -8,80 +8,80 @@ Ollama was already installed. Qwen3 0.6B has now been downloaded and configured 
 
 Real browser verification returned **17 + 25 = 42** with provider `ollama / qwen3:0.6b`. Piper audio was transcribed by local Whisper as **Hello Jarvis, what is 17 plus 25?** A synthetic Hey Jarvis utterance scored **0.998** against the 0.55 wake threshold; silence scored zero. These checks are not substitutes for testing your microphone, accent, room, and speakers.
 
-## Start
+## Always-ready Windows assistant
 
-For development, open two PowerShell terminals in this directory:
+Run the native tray application independently of a browser or VS Code:
 
 ```powershell
-# Terminal 1
-.\scripts\start-backend.ps1
+.\scripts\start-background.ps1
+.\scripts\enable-startup.ps1
+.\.venv\Scripts\python.exe -m desktop.main --startup-status
 ```
 
+Startup is registered for the current Windows user **after login**, once the user session and audio devices are available. It is enabled on this machine. Keep this project and its virtual environment available at their registered paths. The supervisor restarts a crashed worker with backoff, stops after five crashes in ten minutes, and uses Windows named mutexes to prevent duplicate supervisors/workers.
+
+The tray menu provides Open dashboard, Start conversation, Pause/privacy, Resume, Emergency stop, and Exit. Closing the dashboard leaves the native microphone worker running. Exit stops both the microphone and backend. Pause aborts microphone capture, clears queued audio, stops playback, cancels the active AI request, and prevents new tool executions. A script already started is stopped with its child processes; an OS action already dispatched cannot be undone.
+
+Say **Hey Jarvis**, wait for the acknowledgment, then speak. Silence ends the utterance. Follow-up conversation stays open for 15 seconds before returning to standby. Saying Hey Jarvis during speech interrupts playback. Standby wake detection is local; no continuous cloud audio stream runs. Microphone frames are processed in memory and discarded. Logs contain status/error information, not voice transcripts. Approved tool arguments/results are recorded in the SQLite task journal.
+
+Open [the dashboard](http://127.0.0.1:8000) or the development preview at [port 5173](http://127.0.0.1:5173). Voice options controls the native microphone, language, wake threshold, follow-up timeout, and speech volume. A lower wake threshold is more sensitive. Start/Pause buttons control the tray worker when it is running. Browser voice remains available when running the development API without the native worker.
+
+English local recognition and speech passed generated-audio tests. Multilingual Whisper supports selectable Tamil/auto recognition; Tamil/Tanglish accuracy on your speech has not been verified. The installed Piper voice is English. Offline Tamil playback needs an installed Tamil SAPI voice (none found here). Online/hybrid native speech can use optional Edge Tamil TTS; generated Tamil speech and native-library decoding passed; your speech/accent remains unverified. Cloud Realtime is a separate browser session requiring an OpenAI key; it has no computer tools and must be explicitly started.
+
+## Tools and permissions
+
+The agent chooses typed tools and observes their actual results. Each request is bounded to four model turns/six tool calls. Native voice automatically performs routine actions such as opening approved applications/websites, reading permitted files, creating new workspace files/projects, and saving notes/reminders/to-do items. The browser agent retains review for mutations. Long-term memories always require consent.
+
+High-impact actions create a pending task with exact arguments: edits, moves, copies, ZIP extraction/compression, recycling files, downloads, scripts, package installs, volume/brightness, lock/restart/shutdown, and application closing. Review Tasks or use the exact spoken confirmation phrase. Shutdown requires **confirm shutdown**, restart requires **confirm restart**; a generic yes is rejected. Approvals expire after five minutes, cannot be replayed, and are invalidated on backend restart. Native conversation continues after a confirmed action using the execution result.
+
+File operations are scoped to the JARVIS workspace, with explicit Downloads access for the expanded file tools. Absolute paths, traversal, Windows reserved names, alternate streams, sensitive dotfiles, and symlink/junction escapes are blocked. New files never overwrite existing files. Edits require a matching reviewed SHA256 and retain a sibling backup. Organize moves at most 100 matching files/100 MB into a new folder and rolls back on interruption where possible. Recycle uses the Windows Recycle Bin. ZIP extraction rejects traversal, links, and decompression bombs.
+
+Approved Python execution verifies the script hash, runs without a shell, bounds time/output, and supports emergency termination. It runs with your Windows user permissions; **it is not an OS sandbox**. Review code before approval. Pip installs use a project-local virtual environment; npm installs disable lifecycle scripts. Download accepts a reviewed final public HTTPS URL and PDF/text/ZIP files up to 10 MB; it pins validated public DNS, checks TLS for the original host, blocks redirects and never executes downloads. Approval is your trust decision about the source.
+
+System tools report actual CPU, memory, disk, and battery data. Supported hardware can expose brightness and Windows master volume. Application control is limited to installed approved apps; closing is limited to tracked processes. No credential extraction, arbitrary shell command, administrator elevation, security disabling, email/message sending, or unrestricted GUI control is exposed. External calendar integration is not connected; local schedules are available.
+
+## Memory, productivity, and research
+
+SQLite stores approved memories, notes, to-do items, schedules, reminders, settings, and the task journal. The dashboard supports viewing/editing/deleting records and opt-in browser conversation history. Native short-term conversation context remains in memory and is not automatically persisted. Enable memory retrieval in Settings to use approved facts. `all-minilm` produces local semantic embeddings; lexical retrieval is the explicit fallback if embeddings fail. Facts are labeled untrusted data, separate from instructions.
+
+The tray worker announces due reminders/schedules while in standby, once per running session. Paused or exited JARVIS is silent; missed items remain stored. The daily summary tool reads saved productivity records. There is no connected external calendar account.
+
+Offline mode uses Ollama, Whisper, Piper and local tools. Hybrid preserves conversation context when falling back from cloud to Ollama. Internet tools fail explicitly offline. Live research supports DuckDuckGo/Brave search, bounded public article retrieval, Open-Meteo weather, and source links. Brave and OpenAI require configured keys in Windows Credential Manager or backend `.env`; no key is shipped in the frontend. No authenticated cloud session is claimed without a real key.
+
+The local 0.6B default fits this computer but can misinterpret speech and tool requests. Treat tool results as authoritative and use Actions when a request is misunderstood. A stronger optional Ollama model can be selected when memory permits.
+
+## Development and packaging
+
+Do not start a second backend on port 8000 while the tray worker runs. For frontend development only:
+
 ```powershell
-# Terminal 2
 .\scripts\start-frontend.ps1
 ```
 
-Open [JARVIS](http://127.0.0.1:5173). Stop with Ctrl+C. If servers are already running, use the open preview instead of starting duplicates.
-
-For the desktop app, stop the development backend on port 8000, then run:
+For browser-only development, exit the tray app, then start backend and frontend in separate terminals:
 
 ```powershell
-.\scripts\start-desktop.ps1
-# Or the bundled Windows build:
-.\release\JarvisAI\JarvisAI.exe
+.\scripts\start-backend.ps1
+.\scripts\start-frontend.ps1
 ```
 
-The complete `release/JarvisAI` folder is needed, including `_internal` and `models`. Ollama and a downloaded model must still be installed on a new computer. WebView2 must be installed for the native desktop window. The current executable is a development build with diagnostic console output, not a signed installer.
+Build the native tray bundle:
 
-## Use voice
+```powershell
+.\scripts\build-background.ps1
+.\release\JarvisBackground\JarvisBackground.exe --supervise
+```
 
-1. Keep Offline mode selected for local-only conversation.
-2. Click **Start voice**, then grant microphone access in your browser. Speak a sentence; silence ends the utterance automatically, or click **Finish utterance**. Whisper transcribes, the selected AI replies, and Piper speaks the answer.
-3. **Stop / mute** stops microphone tracks, wake streaming, playback, and the active voice request. Pending microphone permission times out after 30 seconds. Device failure/disconnection produces an error instead of silently continuing.
-4. To use the wake word, opt in to **Continuous local listening for Hey Jarvis**, then start it. Audio is streamed only to the localhost wake engine. Say Hey Jarvis, pause briefly, then speak the command. It returns to wake listening after responding. Saying the wake phrase during playback interrupts it. Stop/mute always works.
-5. Pick the microphone after permission reveals device names. Volume affects playback. The waveform is derived from real microphone frame levels.
+Keep the entire `release/JarvisBackground` directory, including `_internal` and `models`. This is an unsigned Windows directory bundle, not a signed installer. Ollama and a downloaded language model remain prerequisites. The source startup command remains registered until explicitly replaced with the bundled executable's `--install-startup` option. Packaged writable data defaults to `%LOCALAPPDATA%/JARVIS AI`; source mode uses `data/`.
 
-English local STT/TTS has been tested with generated audio. Tamil recognition is selectable through multilingual Whisper, but Tamil accuracy is **not yet verified on user speech**. The downloaded Piper voice is English; Tamil playback requires an installed Tamil system voice or configured cloud Realtime. Only English system voices were observed on this machine. The UI does not claim that English Piper can speak Tamil.
+To stop or disable startup:
 
-Browser microphone permission remained pending during automated UI verification; the request was stopped. You must grant access for a real microphone test. Nothing records automatically on startup. Audio is processed in memory and is not saved by the voice routes. `data/voice-smoke.wav` contains generated test speech only.
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/background/command -Method Post -ContentType application/json -Body '{"action":"exit"}'
+.\scripts\disable-startup.ps1
+```
 
-## Chat, agent tools, and approvals
-
-Type or speak in Conversation. Enable **agent tools** to let the model choose validated tools. The local 0.6B model is deliberately small for this machine; its reasoning and tool selection can be unreliable. Larger Ollama models can be selected in Settings when memory permits.
-
-Read-only tools include CPU/RAM, workspace listing/text reading, recent task status, search, article retrieval, and weather. Side effects create a pending task with exact arguments. Review it in **Tasks**, then approve or reject it. Pending tasks expire after five minutes or a backend restart. Approval is one-time; failures are shown and never silently retried.
-
-Supported approved actions:
-
-- Open installed Notepad, VS Code, Chrome, Edge, or Downloads.
-- Create a folder or a Python project; create new text/code files without overwriting.
-- Create a text note and open it in Notepad.
-- Open a public HTTP/HTTPS URL or save a screenshot locally.
-- Close only an application process JARVIS itself launched and still tracks. Modern apps that detach into another process may not be closable this way; unrelated apps are never killed.
-- Save a note, reminder, or explicitly approved long-term memory.
-
-The **Actions** tab also exposes the same validated tools directly when a model misinterprets a request. File tools are limited to `data/workspace` in source mode. Absolute paths, traversal, alternate data streams, reserved names, symlinks/junctions, sensitive dotfiles, executables, and shell scripts are blocked. No file overwrite or deletion tool is exposed. Coding assistance can generate/explain files, but cannot run arbitrary code. This app is a local personal assistant, not an unrestricted desktop agent.
-
-A multi-step read task is bounded to four model turns and six tool calls. A mutating task pauses at its first approval boundary. After approving it, ask JARVIS to check task status and continue; it will propose the next change for review.
-
-## Memory and reminders
-
-Conversation saving is off by default; opt in with **Save future turns locally**. History supports load/delete, with confirmation for deletion. New unsaved conversation context lives in browser memory. Approved memories, notes, reminders, settings, and task history live in SQLite. Use their tabs to view, edit, or delete them. Enable relevant memory retrieval in Settings if desired; retrieved facts are separately labeled untrusted data, not system instructions.
-
-Common password/API-key patterns are blocked from records and skipped in conversation history, but detection is not comprehensive. Do not share secrets in chat. SQLite is plaintext. Deleting records does not securely erase disk sectors, OneDrive copies, or backups.
-
-Due reminders appear as an in-app banner wherever you are in the workspace. JARVIS must be open for the banner to appear; missed reminders remain stored after restart. This release does not install an always-running Windows notification service.
-
-## Internet and cloud options
-
-Offline chat, Whisper, Piper, wake detection, records, and approved local tools require no network after provisioning. Internet tools fail explicitly in Offline mode.
-
-For internet tasks, select Hybrid or Online for the conversation/action. DuckDuckGo search works without a key and returns actual source URLs; availability depends on the upstream service. Brave Search is selectable in Settings and requires its own key. Public article retrieval pins a validated public DNS address, verifies TLS for the original host, disables redirects, limits downloads to 1 MB, strips scripts/styles, and labels page text untrusted. Some sites, redirects, paywalls, or bot protections will therefore fail. Weather uses Open-Meteo with source attribution.
-
-OpenAI chat and cloud Realtime require an API key and model access. Add the key in Settings; Windows Credential Manager stores it with no plaintext fallback. At startup a nonempty `.env` key takes precedence; otherwise the credential vault is used. Remove a key from `.env` when migrating it to the vault. Clearing a credential does not remove a key you separately put in `.env`. No API key is shipped to the frontend bundle.
-
-**Cloud Realtime** uses microphone WebRTC audio, server VAD, natural speech, and interruption. It is unavailable in Offline mode. Its session has no computer tools; use the local voice pipeline for agent actions. Realtime code and missing-configuration handling are implemented, but a real cloud session has **not** been verified because no OpenAI key was supplied. Cloud audio is sent to OpenAI when explicitly started. A configured key alone does not establish billing or model access.
+See [the phase report](docs/ROADMAP.md) and [verification evidence](docs/TEST_REPORT.md). Windows login/reboot, room/accent wake reliability, Tamil/Tanglish speech, authenticated cloud Realtime and clean-machine installation still require acceptance testing.
 
 ## Fresh Windows setup
 
@@ -137,9 +137,10 @@ backend/app/services/         provider adapters and explicit failover
 backend/app/voice/            local Whisper and Piper engines
 backend/app/tools/            validated local tools, research and SSRF defenses
 backend/app/memory/           conversations, records, preferences, task journal
-backend/app/security/         credential vault and bounded HTTP bodies
+backend/app/security/         credential vault, bounded processes and HTTP bodies
 backend/tests/               critical security and behavior regression tests
-backend/desktop.py           desktop launcher and isolated smoke mode
+desktop/                    native tray, wake microphone, startup, supervisor
+backend/desktop.py           optional dashboard-window launcher
 backend/setup_models.py      explicit model provisioning
 backend/verify_voice.py       generated-audio/real-model integration check
 frontend/src/                dashboard, voice, chat, workspace UI

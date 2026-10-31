@@ -14,6 +14,7 @@ type Tool = {
   description: string;
   approval: boolean;
   schema: {
+    required?: string[];
     properties: Record<
       string,
       { type: string; enum?: string[]; title: string; format?: string }
@@ -57,10 +58,15 @@ async function call<T>(
 
 export default function WorkspacePanel({
   onSettingsChange,
+  section,
 }: {
   onSettingsChange: (mode: string) => void;
+  section?: string;
 }) {
   const [tab, setTab] = useState("tasks");
+  useEffect(() => {
+    if (section) setTab(section);
+  }, [section]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
@@ -110,7 +116,7 @@ export default function WorkspacePanel({
       try {
         const [t, r, reminders] = await Promise.all([
           call<Task[]>("/tasks"),
-          ["memory", "note", "reminder"].includes(tab)
+          ["memory", "note", "reminder", "todo", "schedule"].includes(tab)
             ? call<RecordItem[]>(`/records/${tab}`)
             : Promise.resolve([]),
           call<RecordItem[]>("/records/reminder"),
@@ -167,9 +173,30 @@ export default function WorkspacePanel({
   }
 
   async function propose(name: string, arguments_: Record<string, unknown>) {
+    const definition = tools.find((item) => item.name === name);
+    const normalized = Object.fromEntries(
+      Object.entries(arguments_)
+        .filter(([, value]) => value !== "")
+        .map(([key, value]) => {
+          const type = definition?.schema.properties[key]?.type;
+          if (type === "array" && typeof value === "string")
+            return [
+              key,
+              value.trim().startsWith("[")
+                ? JSON.parse(value)
+                : value
+                    .split(",")
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+            ];
+          if (type === "integer" && typeof value === "string")
+            return [key, Number(value)];
+          return [key, value];
+        }),
+    );
     const result = await call("/tools", "POST", {
       name,
-      arguments: arguments_,
+      arguments: normalized,
       mode: settings?.mode ?? "offline",
     });
     setResult(JSON.stringify(result, null, 2));
@@ -218,6 +245,8 @@ export default function WorkspacePanel({
           ["tools", "Actions"],
           ["memory", "Memories"],
           ["note", "Notes"],
+          ["todo", "To-do"],
+          ["schedule", "Schedule"],
           ["reminder", "Reminders"],
           ["settings", "Settings"],
         ].map(([id, label]) => (
@@ -247,11 +276,8 @@ export default function WorkspacePanel({
         )}
         {tab === "tasks" && (
           <>
-            <h2>Review actions before they run.</h2>
-            <p>
-              Pending requests expire after five minutes or a backend restart.
-              Only approve actions you asked for.
-            </p>
+            <h2>Task activity</h2>
+
             {tasks.length === 0 && <p>No tasks yet.</p>}
             {tasks.map((task) => (
               <article className="task-card" key={task.id}>
@@ -290,11 +316,9 @@ export default function WorkspacePanel({
         )}
         {tab === "tools" && (
           <>
-            <h2>Authorized computer actions</h2>
+            <h2>Actions</h2>
             <p>
               Files stay in {settings?.workspace ?? "the JARVIS workspace"}.
-              Existing files cannot be overwritten. App launches and other
-              changes require review.
             </p>
             <form
               onSubmit={(e) => {
@@ -325,7 +349,7 @@ export default function WorkspacePanel({
                     {schema.title}
                     {schema.enum ? (
                       <select
-                        required
+                        required={selected?.schema.required?.includes(key)}
                         value={args[key] ?? ""}
                         onChange={(e) =>
                           setArgs((previous) => ({
@@ -341,7 +365,7 @@ export default function WorkspacePanel({
                       </select>
                     ) : (
                       <textarea
-                        required
+                        required={selected?.schema.required?.includes(key)}
                         value={args[key] ?? ""}
                         maxLength={key === "content" ? 40000 : 2000}
                         onChange={(e) =>
@@ -368,7 +392,7 @@ export default function WorkspacePanel({
             </form>
           </>
         )}
-        {["memory", "note", "reminder"].includes(tab) && (
+        {["memory", "note", "reminder", "todo", "schedule"].includes(tab) && (
           <>
             <h2>
               {tab === "memory"
@@ -393,10 +417,14 @@ export default function WorkspacePanel({
                       ? "save_memory"
                       : tab === "note"
                         ? "save_note"
-                        : "set_reminder",
+                        : tab === "todo"
+                          ? "save_todo"
+                          : tab === "schedule"
+                            ? "schedule_event"
+                            : "set_reminder",
                     {
                       content,
-                      ...(tab === "reminder"
+                      ...(["reminder", "schedule"].includes(tab)
                         ? { due_at: new Date(due).toISOString() }
                         : {}),
                     },
@@ -414,7 +442,7 @@ export default function WorkspacePanel({
                   onChange={(e) => setContent(e.target.value)}
                 />
               </label>
-              {tab === "reminder" && (
+              {["reminder", "schedule"].includes(tab) && (
                 <label>
                   Remind me at
                   <input

@@ -314,25 +314,41 @@ export default function App() {
             <div className="system-telemetry">
               <div className="telemetry-heading">
                 <Cpu size={13} />
-                <span>SYSTEM TELEMETRY</span>
+                <span>
+                  {health?.deployment === "cloud"
+                    ? "CLOUD CONNECTION"
+                    : "SYSTEM TELEMETRY"}
+                </span>
                 <span className="live-label">LIVE</span>
               </div>
               <div className="metric-row">
                 <div className="metric">
-                  <span>CPU</span>
+                  <span>
+                    {health?.deployment === "cloud" ? "BACKEND" : "CPU"}
+                  </span>
                   <strong>
-                    {system ? system.cpu_percent.toFixed(1) : "—"}
-                    <small>%</small>
+                    {health?.deployment === "cloud"
+                      ? "Online"
+                      : system
+                        ? system.cpu_percent.toFixed(1)
+                        : "—"}
+                    {health?.deployment !== "cloud" && <small>%</small>}
                   </strong>
                   <div className="metric-track">
                     <i style={{ width: `${system?.cpu_percent ?? 0}%` }} />
                   </div>
                 </div>
                 <div className="metric">
-                  <span>MEMORY</span>
+                  <span>
+                    {health?.deployment === "cloud" ? "TRANSPORT" : "MEMORY"}
+                  </span>
                   <strong>
-                    {system ? system.ram_percent.toFixed(1) : "—"}
-                    <small>%</small>
+                    {health?.deployment === "cloud"
+                      ? "HTTPS"
+                      : system
+                        ? system.ram_percent.toFixed(1)
+                        : "—"}
+                    {health?.deployment !== "cloud" && <small>%</small>}
                   </strong>
                   <div className="metric-track purple">
                     <i style={{ width: `${system?.ram_percent ?? 0}%` }} />
@@ -345,9 +361,11 @@ export default function App() {
                     {health?.mode ?? "—"}
                   </strong>
                   <small>
-                    {system
-                      ? `${system.ram_available_gb} GB available`
-                      : "Telemetry unavailable"}
+                    {health?.deployment === "cloud"
+                      ? "Browser voice enabled"
+                      : system
+                        ? `${system.ram_available_gb} GB available`
+                        : "Telemetry unavailable"}
                   </small>
                 </div>
               </div>

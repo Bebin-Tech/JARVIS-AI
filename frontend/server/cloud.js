@@ -44,7 +44,10 @@ export async function handle(request) {
     if (!response.ok) {
       const code = result.error?.code || result.error?.type || '';
       console.warn('Cloud provider rejected request', response.status, code);
-      if (code === 'customer_verification_required' || response.status === 402) return json({detail:'Vercel AI Gateway needs account verification or available credits. Configure billing/credits in the Vercel team AI Gateway settings.'},503);
+      const provider_code = typeof code === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(code) ? code : 'unknown';
+      if (code === 'customer_verification_required') return json({detail:'Vercel requires account verification for the bebin-dotms-projects team. Complete the payment-method verification in that team’s AI Gateway settings.', provider_code},503);
+      if (code === 'insufficient_funds') return json({detail:'AI Gateway credits are insufficient for the bebin-dotms-projects team. Add credits to that team, then retry.', provider_code},503);
+      if (response.status === 402) return json({detail:`AI Gateway rejected this request (${provider_code}). Review the bebin-dotms-projects team’s AI Gateway billing and limits.`, provider_code},503);
       if (response.status === 429) return json({detail:'Cloud AI rate limit reached. Please try again shortly.'},429);
       return json({detail:'Cloud AI could not authenticate or access this model. Check the Vercel AI Gateway configuration.'},502);
     }

@@ -7,6 +7,7 @@ type Recognition = {
   interimResults: boolean;
   onresult: ((event: { results: { transcript: string }[][] }) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
+  onstart: (() => void) | null;
   onend: (() => void) | null;
   start(): void;
   stop(): void;
@@ -30,6 +31,7 @@ export default function CloudVoice({
   const [spoken, setSpoken] = useState(true);
   const recognition = useRef<Recognition | null>(null);
   const generation = useRef(0);
+  const permissionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const supported = Boolean(
     (window as SpeechWindow).SpeechRecognition ||
     (window as SpeechWindow).webkitSpeechRecognition,
@@ -39,6 +41,7 @@ export default function CloudVoice({
   }, [state, onStateChange]);
   useEffect(
     () => () => {
+      if (permissionTimer.current) clearTimeout(permissionTimer.current);
       generation.current++;
       recognition.current?.abort();
       window.speechSynthesis?.cancel();
@@ -46,6 +49,7 @@ export default function CloudVoice({
     [],
   );
   function stop() {
+    if (permissionTimer.current) clearTimeout(permissionTimer.current);
     generation.current++;
     recognition.current?.abort();
     recognition.current = null;
@@ -72,6 +76,14 @@ export default function CloudVoice({
     input.continuous = false;
     input.interimResults = false;
     let received = false;
+    input.onstart = () => {
+      if (permissionTimer.current) clearTimeout(permissionTimer.current);
+      if (run !== generation.current) {
+        input.abort();
+        return;
+      }
+      setState("listening");
+    };
     input.onresult = (event) => {
       if (run !== generation.current) return;
       received = true;
@@ -126,6 +138,7 @@ export default function CloudVoice({
         });
     };
     input.onerror = (event) => {
+      if (permissionTimer.current) clearTimeout(permissionTimer.current);
       if (run !== generation.current) return;
       setState("idle");
       setError(
@@ -137,12 +150,21 @@ export default function CloudVoice({
       );
     };
     input.onend = () => {
+      if (permissionTimer.current) clearTimeout(permissionTimer.current);
       if (!received && run === generation.current) setState("idle");
     };
     try {
-      setState("listening");
+      setState("connecting");
+      permissionTimer.current = setTimeout(() => {
+        if (run !== generation.current) return;
+        stop();
+        setError(
+          "Microphone permission is pending. Allow access in your browser, then try again.",
+        );
+      }, 30000);
       input.start();
     } catch {
+      if (permissionTimer.current) clearTimeout(permissionTimer.current);
       setState("idle");
       setError("Could not start the microphone. Please try again.");
     }

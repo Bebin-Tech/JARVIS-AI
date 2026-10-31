@@ -8,6 +8,24 @@ Ollama was already installed. Qwen3 0.6B has now been downloaded and configured 
 
 Real browser verification returned **17 + 25 = 42** with provider `ollama / qwen3:0.6b`. Piper audio was transcribed by local Whisper as **Hello Jarvis, what is 17 plus 25?** A synthetic Hey Jarvis utterance scored **0.998** against the 0.55 wake threshold; silence scored zero. These checks are not substitutes for testing your microphone, accent, room, and speakers.
 
+## Hosted chat and voice
+
+The [live site](https://jarvis-ai-one-pink.vercel.app) now includes a cloud backend in `frontend/api/index.js`, with shared logic in `frontend/server/cloud.js`. Vercel rewrites `/api/*` to that function. It uses AI Gateway with the current request's rotating Vercel OIDC identity; credentials stay server-side. The configured model is `openai/gpt-4.1-mini`, verified against the live model catalog. `AI_GATEWAY_MODEL` can override it and an optional server-only `AI_GATEWAY_API_KEY` can replace OIDC.
+
+**Current activation requirement:** the production backend authenticates, but the provider rejects live model requests because the Vercel team needs AI Gateway account verification or available credits. Enable that in the team's AI Gateway settings, then retry chat. No successful cloud AI reply is claimed yet. This account step is distinct from deploying code; it cannot be bypassed by connecting local Ollama.
+
+Hosted voice uses browser SpeechRecognition (Chrome/Edge recommended) and speech synthesis. Click Start voice, allow microphone access, speak, then the recognized text goes through cloud chat and the reply is spoken. Stop aborts recognition and playback. Permission has a 30-second timeout; the UI shows Listening only after the browser confirms capture started. Browser speech services may process speech online. No always-on recording, wake word, desktop controls, server conversation persistence or private SQLite records are exposed by this cloud function. Tamil recognition is selectable; Tamil playback requires a Tamil browser voice. Unsupported browsers retain text chat.
+
+Cloud request validation bounds context/body/output, rejects foreign browser origins and desktop-only options, and applies an instance-local request throttle. It is not a globally shared quota. The existing Vercel access configuration remains in place. AI usage uses the team's Gateway credits/billing. In-memory conversation context is passed with each request and is cleared by New chat; cloud server history saving is disabled.
+
+Run the cloud backend regression checks with:
+
+```powershell
+npm run test --prefix frontend
+npm run lint --prefix frontend
+npm run build --prefix frontend
+```
+
 ## Always-ready Windows assistant
 
 Run the native tray application independently of a browser or VS Code:

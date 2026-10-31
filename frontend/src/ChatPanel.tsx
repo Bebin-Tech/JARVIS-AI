@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import VoicePanel from "./VoicePanel";
+import CloudVoice from "./CloudVoice";
 import WorkspacePanel from "./WorkspacePanel";
 import TextWithLinks from "./TextWithLinks";
 
@@ -41,12 +42,14 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 
 export default function ChatPanel({
   defaultMode,
+  cloud = false,
   onStateChange,
   workspaceSection,
   onOpenWorkspace,
   onCloseWorkspace,
 }: {
   defaultMode?: string;
+  cloud?: boolean;
   onStateChange?: (state: string) => void;
   workspaceSection: string | null;
   onOpenWorkspace: (section: string) => void;
@@ -184,11 +187,15 @@ export default function ChatPanel({
 
   return (
     <section className="panel chat-panel">
-      <VoicePanel
-        onTranscript={sendMessage}
-        mode={mode}
-        onStateChange={onStateChange}
-      />
+      {cloud ? (
+        <CloudVoice onTranscript={sendMessage} onStateChange={onStateChange} />
+      ) : (
+        <VoicePanel
+          onTranscript={sendMessage}
+          mode={mode}
+          onStateChange={onStateChange}
+        />
+      )}
       <div className="panel-top">
         <span>
           <MessageSquare size={14} /> CONVERSATION
@@ -196,7 +203,7 @@ export default function ChatPanel({
         <div className="chat-actions">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || cloud}
             onClick={() => {
               setShowHistory(!showHistory);
               if (!showHistory) void refreshHistory();
@@ -221,16 +228,20 @@ export default function ChatPanel({
               setMode(e.target.value);
             }}
           >
-            <option value="hybrid">Hybrid</option>
-            <option value="online">Online · OpenAI</option>
-            <option value="offline">Offline · Ollama</option>
+            <option disabled={cloud} value="hybrid">
+              Hybrid
+            </option>
+            <option value="online">Online · Cloud AI</option>
+            <option disabled={cloud} value="offline">
+              Offline · Ollama
+            </option>
           </select>
         </label>
         <label className="save-toggle">
           <input
             type="checkbox"
             checked={save}
-            disabled={busy}
+            disabled={busy || cloud}
             onChange={(e) => {
               setSave(e.target.checked);
               if (!e.target.checked) setConversationId(null);
@@ -243,7 +254,7 @@ export default function ChatPanel({
         <input
           type="checkbox"
           checked={toolsEnabled}
-          disabled={busy}
+          disabled={busy || cloud}
           onChange={(e) => setToolsEnabled(e.target.checked)}
         />{" "}
         Agent tools

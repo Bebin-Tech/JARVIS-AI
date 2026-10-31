@@ -21,6 +21,7 @@ import {
 import ChatPanel from "./ChatPanel";
 
 type Health = {
+  deployment?: string;
   status: string;
   name: string;
   version: string;
@@ -122,6 +123,7 @@ export default function App() {
             <button
               key={name}
               className={workspaceSection === id ? "selected" : ""}
+              disabled={health?.deployment === "cloud" && id !== null}
               aria-label={name}
               title={name}
               aria-pressed={workspaceSection === id}
@@ -134,6 +136,7 @@ export default function App() {
         </nav>
         <button
           className="rail-settings"
+          disabled={health?.deployment === "cloud"}
           aria-label="Settings"
           title="Settings"
           onClick={() => setWorkspaceSection("settings")}
@@ -351,6 +354,7 @@ export default function App() {
             </div>
           </section>
           <ChatPanel
+            cloud={health?.deployment === "cloud"}
             defaultMode={health?.mode}
             onStateChange={setAssistantState}
             workspaceSection={workspaceSection}
@@ -362,7 +366,9 @@ export default function App() {
           <span>
             <Wifi size={11} />
             {health
-              ? "Connection secure · localhost"
+              ? health.deployment === "cloud"
+                ? "Cloud connected · HTTPS"
+                : "Connection secure · localhost"
               : "Local connection unavailable"}
           </span>
           <span>

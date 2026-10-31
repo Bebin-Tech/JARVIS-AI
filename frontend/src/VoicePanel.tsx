@@ -1,3 +1,4 @@
+import { readApiJson } from "./apiResponse";
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Radio, Volume2 } from "lucide-react";
 import BackgroundSettings from "./BackgroundSettings";
@@ -47,7 +48,7 @@ function wavBlob(frames: Int16Array[]): Blob {
 
 async function checked(response: Response) {
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
+    const body = await readApiJson(response).catch(() => ({}));
     throw new Error(
       typeof body.detail === "string"
         ? body.detail
@@ -128,7 +129,7 @@ export default function VoicePanel({
           signal: AbortSignal.timeout(3000),
         });
         if (response.ok && !cancelled) {
-          const value = await response.json();
+          const value = await readApiJson(response);
           setNative(value);
           if (value.running && !live.current) {
             setLevel(value.level ?? 0);
@@ -155,7 +156,7 @@ export default function VoicePanel({
           body: JSON.stringify({ action }),
         }),
       );
-      setNative(await response.json());
+      setNative(await readApiJson(response));
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Background command failed",
@@ -199,7 +200,7 @@ export default function VoicePanel({
     const controller = new AbortController();
     void fetch("/api/voice/status", { signal: controller.signal })
       .then(checked)
-      .then((r) => r.json())
+      .then((r) => readApiJson(r))
       .then(setAvailable)
       .catch(() => {});
     function update() {
@@ -294,7 +295,7 @@ export default function VoicePanel({
           signal: request.current.signal,
         }),
       );
-      const result = (await response.json()) as { text: string };
+      const result = (await readApiJson(response)) as { text: string };
       if (run !== generation.current) return;
       const text = result.text.replace(/^hey\s+jarvis[,\s]*/i, "").trim();
       setTranscript(text);

@@ -1,3 +1,4 @@
+import { readApiJson } from "./apiResponse";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
@@ -28,7 +29,7 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
     signal: AbortSignal.timeout(100000),
   });
-  const body = await response.json();
+  const body = await readApiJson(response);
   if (!response.ok)
     throw new Error(
       typeof body.detail === "string"

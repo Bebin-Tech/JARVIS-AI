@@ -1,3 +1,4 @@
+import { readApiJson } from "./apiResponse";
 import { useEffect, useState } from "react";
 import TextWithLinks from "./TextWithLinks";
 
@@ -46,7 +47,7 @@ async function call<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(30000),
   });
-  const value = await response.json();
+  const value = await readApiJson(response);
   if (!response.ok || value.error)
     throw new Error(
       typeof value.detail === "string"

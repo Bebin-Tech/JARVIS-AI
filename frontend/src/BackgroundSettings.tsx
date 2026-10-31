@@ -1,3 +1,4 @@
+import { readApiJson } from "./apiResponse";
 import { useEffect, useState } from "react";
 
 type AudioSettings = {
@@ -18,13 +19,13 @@ export default function BackgroundSettings() {
       fetch("/api/background/settings", { signal: controller.signal }).then(
         (r) => {
           if (!r.ok) throw new Error();
-          return r.json();
+          return readApiJson(r);
         },
       ),
       fetch("/api/background/devices", { signal: controller.signal }).then(
         (r) => {
           if (!r.ok) throw new Error();
-          return r.json();
+          return readApiJson(r);
         },
       ),
     ])

@@ -1,3 +1,4 @@
+import { readApiJson } from "./apiResponse";
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -48,8 +49,9 @@ export default function App() {
       const response = await fetch("/api/health", {
         signal: signal ?? AbortSignal.timeout(5000),
       });
+      const result = await readApiJson(response);
       if (!response.ok) throw new Error(`Backend returned ${response.status}`);
-      setHealth((await response.json()) as Health);
+      setHealth(result as Health);
       setError("");
     } catch (err) {
       if (signal?.aborted) return;
@@ -76,7 +78,7 @@ export default function App() {
           signal: controller.signal,
         });
         if (!response.ok) throw new Error("Telemetry unavailable");
-        const value = await response.json();
+        const value = await readApiJson(response);
         if (!stopped) setSystem(value);
       } catch {
         if (!stopped) setSystem(null);
@@ -302,7 +304,8 @@ export default function App() {
             </button>
             {error && (
               <p className="error" role="alert">
-                {error}
+                {error}{" "}
+                <a href="http://127.0.0.1:8000">Open desktop companion</a>
               </p>
             )}
             <div className="system-telemetry">
